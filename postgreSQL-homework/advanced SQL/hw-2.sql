@@ -61,25 +61,26 @@ create table employee_salary_history (
 );
 
 create trigger employee_salary 
-before insert or update on employee_salary
-for each row execute function employee_salary_log()
+after insert or update on employee_salary
+for each row execute function employee_salary_log();
 
 create or replace function employee_salary_log () returns trigger as $$
 declare esh_emp_id int4 = new.emp_id;
 	salary_old numeric(12,2) = 0;
 	salary_new numeric(12,2) = new.salary;
 	difference numeric(12,2) = new.salary;
+	count_emp int = (select count(es.order_id) from employee_salary es where es.emp_id = esh_emp_id);
 begin
 	if tg_op = 'INSERT'
 		then 
-			if esh_emp_id in (select distinct es.emp_id from employee_salary es)
+			if count_emp > 1
 				then salary_old = (
 						select es.salary
 						from employee_salary es
-						where es.emp_id = esh_emp_id and es.effective_from = (
-							select max(es2.effective_from) 
-							from employee_salary es2 
-							where es2.emp_id = esh_emp_id));
+						where es.emp_id = esh_emp_id
+						order by es.effective_from desc
+						offset 1
+						limit 1);
 					difference = salary_new - salary_old;
 			end if;
 	elseif tg_op = 'UPDATE'
@@ -92,8 +93,7 @@ begin
 	return new;
 end;
 $$ language plpgsql
-
-
+						
 -- Задание 4. Напишите процедуру, которая содержит в себе транзакцию на вставку данных в таблицу employee_salary. 
 -- Входными параметрами являются поля таблицы employee_salary.
 
